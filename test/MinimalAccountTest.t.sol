@@ -95,7 +95,7 @@ contract MinimalAccountTest is Test {
         assertEq(validationData, 0);
     }
 
-    function testEntryPoingCanExecuteCommands() public {
-        
+    function testEntryPointCanExecuteCommands() public {
+
     }
 }
