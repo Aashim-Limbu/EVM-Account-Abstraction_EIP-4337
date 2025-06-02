@@ -2,7 +2,7 @@
 pragma solidity >= 0.8.0 <0.9.0;
 
 import {Test, console} from "forge-std/Test.sol";
-import {MinimalAccount} from "../src/ethereum/MinimalAccount.sol";
+import {MinimalAccount,IEntryPoint} from "../src/ethereum/MinimalAccount.sol";
 import {DeployMinimal} from "../script/DeployMinimal.s.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
 import {ERC20Mock} from "@openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
@@ -10,6 +10,7 @@ import {
     SendPackedUserOps, PackedUserOperation, IEntryPoint, MessageHashUtils
 } from "../script/SendPackedUserOps.s.sol";
 import {ECDSA} from "@openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
+
 
 contract MinimalAccountTest is Test {
     using MessageHashUtils for bytes32;
@@ -67,7 +68,7 @@ contract MinimalAccountTest is Test {
         bytes memory executeCallData =
             abi.encodeWithSelector(MinimalAccount.execute.selector, dest, value, functionData);
         PackedUserOperation memory packedUserOps =
-            sendPackedUserOps.generatedSignedUserOperation(executeCallData, helperConfig.getConfig());
+            sendPackedUserOps.generatedSignedUserOperation(executeCallData, helperConfig.getConfig(),address(minimalAccount));
         bytes32 userOperationHash = IEntryPoint(helperConfig.getConfig().entryPoint).getUserOpHash(packedUserOps);
         // Act
         (address recovered,,) = ECDSA.tryRecover(userOperationHash.toEthSignedMessageHash(), packedUserOps.signature);
@@ -86,7 +87,7 @@ contract MinimalAccountTest is Test {
         bytes memory executeCallData =
             abi.encodeWithSelector(MinimalAccount.execute.selector, dest, value, functionData);
         PackedUserOperation memory packedUserOps =
-            sendPackedUserOps.generatedSignedUserOperation(executeCallData, helperConfig.getConfig());
+            sendPackedUserOps.generatedSignedUserOperation(executeCallData, helperConfig.getConfig(),address(minimalAccount));
         bytes32 userOperationHash = IEntryPoint(helperConfig.getConfig().entryPoint).getUserOpHash(packedUserOps);
         uint256 missingAccountFunds = 1e18;
         // Act
@@ -96,6 +97,22 @@ contract MinimalAccountTest is Test {
     }
 
     function testEntryPointCanExecuteCommands() public {
-
+        // Arrange
+        assertEq(usdc.balanceOf(address(minimalAccount)), 0);
+        address dest = address(usdc);
+        uint256 value = 0;
+        bytes memory functionData = abi.encodeWithSelector(ERC20Mock.mint.selector, address(minimalAccount), AMOUNT);
+        bytes memory executeCallData =
+            abi.encodeWithSelector(MinimalAccount.execute.selector, dest, value, functionData);
+        PackedUserOperation memory packedUserOps =
+            sendPackedUserOps.generatedSignedUserOperation(executeCallData, helperConfig.getConfig(),address(minimalAccount));
+        vm.deal(address(minimalAccount),1e18);
+        PackedUserOperation[] memory ops = new PackedUserOperation[](1);
+        ops[0]=packedUserOps;
+        // Act
+        vm.prank(randomUser);
+        IEntryPoint(helperConfig.getConfig().entryPoint).handleOps(ops,payable(randomUser));
+        // Assert
+        assertEq(usdc.balanceOf(address(minimalAccount)),AMOUNT);
     }
 }
